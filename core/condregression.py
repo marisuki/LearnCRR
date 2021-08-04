@@ -1,11 +1,16 @@
-import database
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+
+from core import database
 import numpy as np
 import time
 from copy import copy
 import random
 from sklearn.linear_model import BayesianRidge
 import sklearn
-import sklearn_cnd
+from core import sklearn_cnd
 from sklearn.metrics import mean_squared_error
 mse = mean_squared_error
     
@@ -104,7 +109,7 @@ def regress(reg, X_train, y_train, test_func, rhoA):
     if len(y_train) == 0: return ans, -1, -1, -1
     reg.fit(X_train, y_train)
     flg, rmse, pred = test_func(reg, X_train, y_train, rhoA)
-    print(flg,rmse)
+    # print(flg,rmse)
     return copy(reg), rmse, flg, pred
 
 
@@ -130,6 +135,12 @@ def dependence_sel(tb, IC, attrs, functionals, target, rho):
             if rmse < ans[1]: 
                 ans = (reg, rmse, flg, pred, y_train, i)
     return ans
+
+
+def fusion_test(tb, IC, attrs, reg, src, target, rho):
+    X_train, y_train, x_train = sklearn_cnd.generate(attrs, tb, IC, target, params=params)
+    flg, rmse, pred = test(reg, X_train[src], y_train, rho[target])
+    return flg, rmse
 
 
 def discrete_separation(queue, schema):
@@ -166,6 +177,7 @@ def separation(tb, schema, k, functionals, dom, rho, max_P, max_p, targets, data
     st_tot = time.time()
     tot_y, tot_pred = np.array([]), np.array([])
     for A in targets:
+        print("Regress on " + str(A))
         attrs_excA = list(filter(lambda x: x!=A, list(schema.keys())))
         queue = []
         inst = range(len(tb))
@@ -173,10 +185,8 @@ def separation(tb, schema, k, functionals, dom, rho, max_P, max_p, targets, data
         else: C_init = init_condition
         # test whole regress
         reg, rmse, flg, pred, y, src_id = dependence_sel(tb, inst, schema.keys(), functionals, A, rho)
-        print("On all " + str(rmse))
         print("Overall: " + str(rmse) + ", Target: " + str(A) + ", Flag: " + str(flg) + ", SZ= " + str(len(y)))
         if flg or force or len(tb) < 2*min(k) or max_P <= 0 or max_p <= 0:
-            # print("Added")
             rules.append((C_init, reg, A, src_id))
             rules_cnd.append((C_init, A))
             tot_y = np.append(tot_y, y)
@@ -185,9 +195,7 @@ def separation(tb, schema, k, functionals, dom, rho, max_P, max_p, targets, data
         else:
             queue.append((C_init, {i: 0 for i in schema}, (reg, rmse, flg, pred, y, src_id)))
         queue = discrete_separation(queue, schema)
-        # print(queue)
         while queue:
-            # print("Queue sz= " + str(len(queue)))
             queue = list(filter(lambda cc: not intersection2d(cc[0], rules_cnd), queue))
             cond, sep_map, avail_ans = queue[0]
             queue = queue[1:]
@@ -196,8 +204,6 @@ def separation(tb, schema, k, functionals, dom, rho, max_P, max_p, targets, data
             opt_sep = (-1, 0x3f3f3f3f, [])
             for B in sep_attr:
                 dsz, b = mid(tb, IC, B)
-                # t.B <= b \in P
-                # if sum(sep_map.values()) >= max_P or max(sep_map.values()) >= max_p: continue
                 candidate = [AND1d(cond, B, [cond[B][0], b, 3]), AND1d(cond, B, [b, cond[B][1], 3])]
                 candidate = [(condx, cond_filter(tb, condx, inst, data_precision)) for condx in candidate]
                 candidate = list(filter(lambda x: len(x[1])!=0, candidate))
@@ -206,11 +212,7 @@ def separation(tb, schema, k, functionals, dom, rho, max_P, max_p, targets, data
                     # funs with size limit.
                     restricted_funcs = list(filter(lambda x: x[0] <= len(ICi), list(zip(k, functionals))))
                     restricted_funcs = [x[1] for x in restricted_funcs]
-                    # ansx: reg, rmse, flg, pred, y
-                    # print(len(restricted_funcs), len(ICi))
                     ansx = dependence_sel(tb, ICi, schema.keys(), restricted_funcs, A, rho)
-                    # print("in sep" + str(ansx[1]))
-                    #ansx = (reg, rmse, flg, pred, y, src_id)
                     if opt_sep[1] > ansx[1]: 
                         if opt_sep[0] != B:
                             opt_sep = (B, ansx[1], [(condx, ansx)])
@@ -218,9 +220,7 @@ def separation(tb, schema, k, functionals, dom, rho, max_P, max_p, targets, data
                         opt_sep = (B, min(opt_sep[1], ansx[1]), opt_sep[2] + [(condx, ansx)])
             if opt_sep[0] == -1:
                 # fail to make separation
-                # print("fail in sep, keep origin")
                 if avail_ans:
-                    # print("Added")
                     rules.append((cond, avail_ans[0], A, avail_ans[5]))
                     rules_cnd.append((cond, A))
                     tot_y = np.append(tot_y, avail_ans[4])
@@ -235,21 +235,51 @@ def separation(tb, schema, k, functionals, dom, rho, max_P, max_p, targets, data
             else:
                 for condition, ansx in opt_sep[2]:
                     reg, rmse, flg, pred, y, src_id = ansx
-                    # print(flg, sep_map, ansx[2])
                     if flg or max(sep_map.values()) >= max_p or sum(sep_map.values()) >= max_P:
-                        # print("Added")
                         rules.append((condition, reg, A, src_id))
                         rules_cnd.append((condition, A))
                         tot_y = np.append(tot_y, y)
                         tot_pred = np.append(tot_pred, pred)
                     else:
-                        # print("add queue")
                         sep_tmp = {sepx: sep_map[sepx] for sepx in sep_map}
                         sep_tmp[B] = sep_map[B] + 1
                         queue.append((condition, sep_tmp, ansx))
     tot_time = time.time() - st_tot
     rmse = mse(tot_pred, tot_y)
-    #print(tot_rmse/tot_tup, tot_time, len(rules))
     return rules, rmse, tot_time
 
+
+def extend(tb, rulesx, attrs, rho, data_precision):
+    rules = rulesx
+    queue = [(rules[i][-2], i) for i in range(len(rules))]
+    while queue:
+        A, i = queue[0]
+        queue = queue[1:]
+        sz_iter = len(rules)
+        for j in range(i + 1, sz_iter):
+            if rules[j][-1] != A: continue
+            flgB, leg = False, False
+            condi, condj = rules[i][0], rules[j][0]
+            cond_ans = {B: condi[B] for B in condi}
+            for B in condi:
+                if condi[B][0] == condj[B][0] and condi[B][1] == condj[B][1]: continue
+                if condi[B][0] == condj[B][1]:
+                    if flgB: 
+                        leg = True
+                        break
+                    cond_ans[B][0] = condj[B][0]
+                    flgB = True
+                if condi[B][1] == condj[B][0]:
+                    if flgB:
+                        leg=True
+                        break
+                    cond_ans[B][1] = condj[B][1]
+                    flgB = True
+            if not leg: # fusable
+                ICj = cond_filter(tb, condj, range(len(tb)), data_precision)
+                flg, rmse = fusion_test(tb, ICj, attrs, rules[i][1], rules[i][3], rules[i][2], rho)
+                if flg: 
+                    queue.append((A, len(rules)))
+                    rules.append((cond_ans, rules[i][1], A, rules[i][3]))
+    return rules
 
