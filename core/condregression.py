@@ -88,7 +88,7 @@ def cond_filter(tb, cond, instance, data_precision):
 def pred_filter(tb, attr, rang, instance):
     ans = []
     for i in instance:
-        if not examine_valuation(tb[i], attr, ">=", rang[0], db.data_precision):
+        if not examine_valuation(tb[i], attr, ">", rang[0], db.data_precision):
             continue
         if not examine_valuation(tb[i], attr, "<=", rang[1], db.data_precision):
             continue
@@ -104,11 +104,11 @@ def mid(tb, instance, attr):
     return len(domainB), domainB[int(len(domainB)/2)]
 
 
-def regress(reg, X_train, y_train, test_func, rhoA):
+def regress(reg, X_train, y_train, X_test, y_test, test_func, rhoA):
     ans = None
     if len(y_train) == 0: return ans, -1, -1, -1
     reg.fit(X_train, y_train)
-    flg, rmse, pred = test_func(reg, X_train, y_train, rhoA)
+    flg, rmse, pred = test_func(reg, X_test, y_test, rhoA)
     # print(flg,rmse)
     return copy(reg), rmse, flg, pred
 
@@ -122,7 +122,7 @@ def test(reg, X_test, y_test, rho):
     return flg, rmse, pred
 
 
-def dependence_sel(tb, IC, attrs, functionals, target, rho):
+def dependence_sel(tb, IC, attrs, functionals, target, rho, fraction=0.9):
     # find best func, indep for target under IC
     # ans: reg, rmse, flg, pred, y_train, src
     ans = (None, 0x3f3f3f3f, False, None, None, -1)
@@ -131,9 +131,11 @@ def dependence_sel(tb, IC, attrs, functionals, target, rho):
         X_train, y_train, x_train = sklearn_cnd.generate(attrs, tb, IC, target, params=params)
         for i in range(len(X_train)):
             reg = sklearn_cnd.init(func_name, y_train, params)
-            pred, rmse, flg, pred = regress(reg, X_train[i], y_train, test, rho[target])
+            train_ic = np.random.choice(np.array(len(IC)), size=(int(len(IC)*fraction),), replace=False)
+            test_ic = np.array(list(filter(lambda x: x not in train_ic, range(len(IC)))))
+            pred, rmse, flg, pred = regress(reg, X_train[i][train_ic], y_train[train_ic], X_train[i][test_ic], y_train[test_ic], test, rho[target])
             if rmse < ans[1]: 
-                ans = (reg, rmse, flg, pred, y_train, i)
+                ans = (reg, rmse, flg, pred, y_train[test_ic], i)
     return ans
 
 
