@@ -15,19 +15,28 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_squared_error
 import copy
 import translation
-kangrui0410
 
 import database
+import time
 
 
 
+#db = database.database()
+#schema = [("sex", "Enumerate"), ("length", "Value"), ("diameter", "Value"), ("height", "Value"), ("whole_weight", "Value"), ("shucked_weight", "Value"), ("viscera_weight", "Value"), ("shell_weight", "Value"), ("rings", "Value")]
+#db.add_table("datasets/abalone.data", schema, ",", first_line_omit=False)
+#db.value_type([ ("length", "Float"), ("diameter", "Float"), ("height", "Float"), ("whole_weight", "Float"),
+#          ("shucked_weight", "Float"), ("viscera_weight", "Float"), ("shell_weight", "Float"), ("rings", "Float")])
 
+schema= [('Time', 'Value'), ('CO(GT)', 'Value'), ('PT08.S1(CO)', 'Value'), ('NMHC(GT)', 'Value'), ('C6H6(GT)', 'Value'), ('PT08.S2(NMHC)', 'Value'), ('NOx(GT)', 'Value'), ('PT08.S3(NOx)', 'Value'), ('NO2(GT)', 'Value'), ('PT08.S4(NO2)', 'Value'), ('PT08.S5(O3)', 'Value'), ('T', 'Value'), ('RH', 'Value'), ('AH', 'Value')]
 db = database.database()
-schema = [("sex", "Enumerate"), ("length", "Value"), ("diameter", "Value"), ("height", "Value"), ("whole_weight", "Value"),
-          ("shucked_weight", "Value"), ("viscera_weight", "Value"), ("shell_weight", "Value"), ("rings", "Value")]
-db.add_table("datasets/abalone.data", schema, ",", first_line_omit=False)
-db.value_type([ ("length", "Float"), ("diameter", "Float"), ("height", "Float"), ("whole_weight", "Float"),
-          ("shucked_weight", "Float"), ("viscera_weight", "Float"), ("shell_weight", "Float"), ("rings", "Float")])
+data_size = 2000
+db.add_table("datasets/AirQualityUCI_t.csv",
+             schema,
+             ";", False, data_size)
+db.value_type(
+        [('Time', 'Float'), ('CO(GT)', 'Float'), ('PT08.S1(CO)', 'Float'), ('NMHC(GT)', 'Float'), ('C6H6(GT)', 'Float'), ('PT08.S2(NMHC)', 'Float'), ('NOx(GT)', 'Float'), ('PT08.S3(NOx)', 'Float'), ('NO2(GT)', 'Float'), ('PT08.S4(NO2)', 'Float'), ('PT08.S5(O3)', 'Float'), ('T', 'Float'), ('RH', 'Float'), ('AH', 'Float')]
+        )
+
 tb = [x[1] for x in db.table]
 attrs = list(filter(lambda x: type(x) != type(""), [attrx[0] for attrx in db.schema.values()]))
 dom = {k: [min(db.dom[k]), max(db.dom[k])] for k in db.dom}
@@ -139,4 +148,4 @@ for train_index, test_index in kf.split(X):
 print(compress, sums)
 #print(dt1/10)
 print(tot_t1*1.0/cnt, tot_t2*1.0/cnt)
-print(loss_t*1.0/cnt, loss_r*1.0/cnt)
+print(loss_t*1.0, loss_r*1.0)
